@@ -1,0 +1,17 @@
+# Lokale instellingen (bevatten wachtwoorden)
+app/config/config.local.php
+
+# Logbestanden
+storage/logs/*.log
+
+# Editor / OS
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
+
+# Build
+*.zip
+
+# Claude Code lokale instellingen
+.claude/
