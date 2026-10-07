@@ -1,59 +1,69 @@
 <?php
 
-declare(strict_types=1);
+/*
+ * Kleine hulpfuncties die overal gebruikt worden.
+ */
 
-use App\Core\Csrf;
-
-/** Tekst veilig in HTML zetten (bescherming tegen XSS). */
+/**
+ * Tekst veilig in de HTML zetten. Typt iemand <script> als naam,
+ * dan wordt dat gewoon als tekst getoond en niet uitgevoerd (bescherming tegen XSS).
+ */
 function e(mixed $value): string
 {
-    return htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
 }
 
-/** Basispad van de app, bijv. "/SpotON/public" of "" op Plesk. */
-function base_url(): string
+/** Map waarin de website staat, bijv. "/fotoshooty/SpotON/public" op XAMPP of "" op Plesk. */
+function baseUrl(): string
 {
-    $dir = str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '/'));
-    return rtrim($dir, '/');
+    return rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'])), '/');
 }
 
-/** URL naar een route, bijv. url('event', ['id' => 3]). */
-function url(string $route = 'home', array $params = []): string
+/** Link naar een pagina, bijv. url('event', ['id' => 3]) wordt index.php?page=event&id=3 */
+function url(string $page = 'home', array $params = []): string
 {
-    if ($route === 'home' && $params === []) {
-        return base_url() . '/';
+    if ($page === 'home' && $params === []) {
+        return baseUrl() . '/';
     }
-    return base_url() . '/index.php?' . http_build_query(['r' => $route] + $params);
+    return baseUrl() . '/index.php?' . http_build_query(['page' => $page] + $params);
 }
 
-function redirect(string $route = 'home', array $params = []): never
+/** Stuurt de browser door naar een andere pagina en stopt daarna. */
+function redirect(string $page = 'home', array $params = []): never
 {
-    header('Location: ' . url($route, $params));
+    header('Location: ' . url($page, $params));
     exit;
 }
 
-/** Alleen interne paden toestaan (voorkomt open redirects naar andere sites). */
-function redirect_to_path(string $path): never
-{
-    if (!str_starts_with($path, '/') || str_starts_with($path, '//')) {
-        redirect();
-    }
-    header('Location: ' . $path);
-    exit;
-}
-
+/** Link naar een CSS- of JavaScript-bestand. */
 function asset(string $path): string
 {
-    return base_url() . '/assets/' . ltrim($path, '/');
+    return baseUrl() . '/assets/' . $path;
 }
 
-function csrf_field(): string
+/** Haalt een heel getal (groter dan 0) uit de URL of het formulier. Geen geldig getal? Dan null. */
+function inputInt(string $key): ?int
 {
-    return '<input type="hidden" name="_csrf" value="' . e(Csrf::token()) . '">';
+    $value = filter_var($_REQUEST[$key] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+    return $value === false ? null : $value;
+}
+
+/** Haalt tekst uit de URL of het formulier, zonder spaties aan het begin en eind. */
+function inputText(string $key): string
+{
+    $value = $_REQUEST[$key] ?? '';
+    return is_string($value) ? trim($value) : '';
+}
+
+/** Controleert of een datum echt bestaat, bijv. isValidDate('2026-10-18', 'Y-m-d'). */
+function isValidDate(string $value, string $format): bool
+{
+    $date = DateTime::createFromFormat($format, $value);
+    return $date !== false && $date->format($format) === $value;
 }
 
 /** Foutmelding onder een formulierveld. */
-function field_error(array $errors, string $field): string
+function fieldError(array $errors, string $field): string
 {
     if (!isset($errors[$field])) {
         return '';
@@ -61,37 +71,32 @@ function field_error(array $errors, string $field): string
     return '<p class="field-error" id="' . e($field) . '-error">' . e($errors[$field]) . '</p>';
 }
 
-/** aria-attributen voor een veld met een fout, zodat schermlezers de fout voorlezen. */
-function field_aria(array $errors, string $field): string
+/** Markeert een veld met een fout, zodat ook een schermlezer de fout voorleest. */
+function fieldAria(array $errors, string $field): string
 {
     return isset($errors[$field]) ? ' aria-invalid="true" aria-describedby="' . e($field) . '-error"' : '';
 }
 
-const DUTCH_MONTHS = ['januari', 'februari', 'maart', 'april', 'mei', 'juni', 'juli',
-    'augustus', 'september', 'oktober', 'november', 'december'];
-const DUTCH_DAYS = ['zondag', 'maandag', 'dinsdag', 'woensdag', 'donderdag', 'vrijdag', 'zaterdag'];
-
-/** "zaterdag 18 oktober 2026" */
-function format_date_long(string $datetime): string
+/** Statuslabel: altijd een kleur én een tekst. $color is success, danger, warning, info of muted. */
+function badge(string $label, string $color): string
 {
-    $ts = strtotime($datetime);
-    return DUTCH_DAYS[(int) date('w', $ts)] . ' ' . date('j', $ts) . ' '
-        . DUTCH_MONTHS[(int) date('n', $ts) - 1] . ' ' . date('Y', $ts);
+    return '<span class="badge badge--' . e($color) . '">' . e($label) . '</span>';
 }
 
-/** "18-10-2026 20:00" */
-function format_datetime(?string $datetime): string
+/** "18-10-2026" */
+function formatDate(string $datetime): string
 {
-    return $datetime ? date('d-m-Y H:i', strtotime($datetime)) : '–';
+    return date('d-m-Y', strtotime($datetime));
 }
 
-function format_time(string $datetime): string
+/** "20:00" */
+function formatTime(string $datetime): string
 {
     return date('H:i', strtotime($datetime));
 }
 
-/** Korte maandnaam voor de datumblokken op de affichekaarten, bijv. "OKT". */
-function month_short(string $datetime): string
+/** "18-10-2026 20:00" */
+function formatDateTime(?string $datetime): string
 {
-    return strtoupper(substr(DUTCH_MONTHS[(int) date('n', strtotime($datetime)) - 1], 0, 3));
+    return $datetime ? date('d-m-Y H:i', strtotime($datetime)) : '–';
 }

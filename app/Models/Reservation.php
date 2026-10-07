@@ -1,176 +1,173 @@
 <?php
 
-declare(strict_types=1);
+/*
+ * Model: reserveringen (tabel reservations).
+ * Eén reservering = één of meer tickets voor één evenement.
+ * Status: 'confirmed' (bevestigd) of 'cancelled' (geannuleerd).
+ */
 
-namespace App\Models;
+const RESERVATION_STATUS_LABELS = [
+    'confirmed' => 'Bevestigd',
+    'cancelled' => 'Geannuleerd',
+];
 
-use App\Core\BusinessRuleException;
-use App\Core\Database;
-use Throwable;
+/* Basisquery: reservering + evenement + bezoeker + hoeveel tickets er al gescand zijn. */
+const RESERVATION_SELECT = "
+    SELECT r.*, e.title AS event_title, e.starts_at, e.location,
+           u.name AS user_name, u.email AS user_email,
+           (SELECT COUNT(*) FROM tickets t WHERE t.reservation_id = r.id AND t.status = 'used') AS used_count
+    FROM reservations r
+    JOIN events e ON e.id = r.event_id
+    JOIN users u ON u.id = r.user_id";
 
-final class Reservation
+/**
+ * Maakt een reservering met tickets.
+ *
+ * Belangrijk: er mogen nooit meer tickets verkocht worden dan er plaatsen zijn.
+ * Daarom gebruiken we een transactie en "FOR UPDATE": het evenement wordt even op slot gezet.
+ * Reserveren twee mensen precies tegelijk, dan moet de tweede wachten tot de eerste klaar is.
+ * Zo kunnen ze niet allebei de laatste plaats krijgen.
+ *
+ * Geeft terug: ['error' => '', 'id' => 12] als het gelukt is,
+ *              ['error' => 'foutmelding', 'id' => 0] als het niet gelukt is.
+ */
+function createReservation(int $userId, int $eventId, int $quantity): array
 {
-    public const STATUS_CONFIRMED = 'confirmed';
-    public const STATUS_CANCELLED = 'cancelled';
+    $pdo = db();
+    $pdo->beginTransaction();
 
-    public const STATUS_BADGES = [
-        self::STATUS_CONFIRMED => ['label' => 'Bevestigd', 'variant' => 'success'],
-        self::STATUS_CANCELLED => ['label' => 'Geannuleerd', 'variant' => 'danger'],
-    ];
+    // 1. Evenement op slot zetten
+    $query = $pdo->prepare('SELECT * FROM events WHERE id = ? FOR UPDATE');
+    $query->execute([$eventId]);
+    $event = $query->fetch();
 
-    private const SELECT = "
-        SELECT r.*, e.title AS event_title, e.starts_at, e.location, e.status AS event_status,
-               u.name AS user_name, u.email AS user_email,
-               (SELECT COUNT(*) FROM tickets t WHERE t.reservation_id = r.id AND t.status = 'used') AS used_count
-        FROM reservations r
-        JOIN events e ON e.id = r.event_id
-        JOIN users u ON u.id = r.user_id";
-
-    /**
-     * Legt een reservering met tickets vast. Nooit meer tickets dan de capaciteit:
-     * de evenementrij wordt vergrendeld (SELECT ... FOR UPDATE), zodat twee bezoekers
-     * die tegelijk reserveren elkaar niet kunnen "inhalen".
-     *
-     * @throws BusinessRuleException als reserveren niet (meer) mogelijk is
-     */
-    public static function create(int $userId, int $eventId, int $quantity): int
-    {
-        $pdo = Database::connection();
-        $pdo->beginTransaction();
-
-        try {
-            $stmt = $pdo->prepare('SELECT * FROM events WHERE id = ? FOR UPDATE');
-            $stmt->execute([$eventId]);
-            $event = $stmt->fetch();
-            if (!$event || $event['status'] === Event::STATUS_DRAFT) {
-                throw new BusinessRuleException('Dit evenement bestaat niet.');
-            }
-
-            $event['sold'] = self::soldTickets($eventId);
-            $state = Event::saleState($event);
-            if (!$state['open']) {
-                throw new BusinessRuleException('Reserveren is niet mogelijk: ' . mb_strtolower($state['label']) . '.');
-            }
-
-            $remaining = Event::remaining($event);
-            if ($quantity > $remaining) {
-                throw new BusinessRuleException(
-                    "Er zijn nog maar {$remaining} " . ($remaining === 1 ? 'plaats' : 'plaatsen')
-                    . " beschikbaar. Kies een kleiner aantal tickets."
-                );
-            }
-
-            $pdo->prepare('INSERT INTO reservations (user_id, event_id, quantity, status) VALUES (?, ?, ?, ?)')
-                ->execute([$userId, $eventId, $quantity, self::STATUS_CONFIRMED]);
-            $reservationId = (int) $pdo->lastInsertId();
-
-            Ticket::createForReservation($reservationId, $quantity);
-
-            $pdo->commit();
-            return $reservationId;
-        } catch (Throwable $e) {
-            $pdo->rollBack();
-            throw $e;
-        }
+    if (!$event) {
+        $pdo->rollBack();
+        return ['error' => 'Dit evenement bestaat niet.', 'id' => 0];
     }
 
-    /**
-     * Annuleert een reservering; de plaatsen komen direct weer vrij omdat alleen
-     * bevestigde reserveringen meetellen. Met $userId kan alleen de eigenaar annuleren.
-     *
-     * @throws BusinessRuleException
-     */
-    public static function cancel(int $reservationId, ?int $userId = null): void
-    {
-        $pdo = Database::connection();
-        $pdo->beginTransaction();
+    // 2. Opnieuw tellen hoeveel plaatsen er nog vrij zijn
+    $event['sold'] = soldTickets($eventId);
+    $status = saleStatus($event);
 
-        try {
-            $sql = 'SELECT r.*, e.starts_at FROM reservations r JOIN events e ON e.id = r.event_id WHERE r.id = ?';
-            $params = [$reservationId];
-            if ($userId !== null) {
-                $sql .= ' AND r.user_id = ?';
-                $params[] = $userId;
-            }
-            $stmt = $pdo->prepare($sql . ' FOR UPDATE');
-            $stmt->execute($params);
-            $reservation = $stmt->fetch();
-
-            if (!$reservation) {
-                throw new BusinessRuleException('Deze reservering bestaat niet.');
-            }
-            if ($reservation['status'] === self::STATUS_CANCELLED) {
-                throw new BusinessRuleException('Deze reservering is al geannuleerd.');
-            }
-            if (strtotime($reservation['starts_at']) <= time()) {
-                throw new BusinessRuleException('Het evenement is al begonnen; annuleren is niet meer mogelijk.');
-            }
-
-            $stmt = $pdo->prepare('SELECT COUNT(*) FROM tickets WHERE reservation_id = ? AND status = ?');
-            $stmt->execute([$reservationId, Ticket::STATUS_USED]);
-            if ((int) $stmt->fetchColumn() > 0) {
-                throw new BusinessRuleException('Er is al een ticket van deze reservering gebruikt bij de ingang; annuleren is niet mogelijk.');
-            }
-
-            $pdo->prepare('UPDATE reservations SET status = ?, cancelled_at = NOW() WHERE id = ?')
-                ->execute([self::STATUS_CANCELLED, $reservationId]);
-            $pdo->prepare('UPDATE tickets SET status = ? WHERE reservation_id = ? AND status = ?')
-                ->execute([Ticket::STATUS_CANCELLED, $reservationId, Ticket::STATUS_VALID]);
-
-            $pdo->commit();
-        } catch (Throwable $e) {
-            $pdo->rollBack();
-            throw $e;
-        }
+    if (!$status['open']) {
+        $pdo->rollBack();
+        return ['error' => 'Reserveren is niet mogelijk: ' . strtolower($status['label']) . '.', 'id' => 0];
     }
 
-    public static function soldTickets(int $eventId): int
-    {
-        $stmt = Database::connection()->prepare(
-            'SELECT COALESCE(SUM(quantity), 0) FROM reservations WHERE event_id = ? AND status = ?'
-        );
-        $stmt->execute([$eventId, self::STATUS_CONFIRMED]);
-        return (int) $stmt->fetchColumn();
+    $remaining = remainingSeats($event);
+    if ($quantity > $remaining) {
+        $pdo->rollBack();
+        return ['error' => "Er zijn nog maar {$remaining} plaatsen beschikbaar. Kies een kleiner aantal.", 'id' => 0];
     }
 
-    public static function forUser(int $userId): array
-    {
-        $stmt = Database::connection()->prepare(self::SELECT . ' WHERE r.user_id = ? ORDER BY e.starts_at DESC');
-        $stmt->execute([$userId]);
-        return $stmt->fetchAll();
+    // 3. Reservering en tickets opslaan
+    $query = $pdo->prepare("INSERT INTO reservations (user_id, event_id, quantity, status) VALUES (?, ?, ?, 'confirmed')");
+    $query->execute([$userId, $eventId, $quantity]);
+    $reservationId = (int) $pdo->lastInsertId();
+
+    createTickets($reservationId, $quantity);
+
+    // 4. Alles in één keer opslaan en het slot eraf halen
+    $pdo->commit();
+    return ['error' => '', 'id' => $reservationId];
+}
+
+/**
+ * Annuleert een reservering. De plaatsen komen meteen weer vrij,
+ * omdat alleen bevestigde reserveringen meetellen.
+ * Met $userId mag alleen de eigenaar zijn eigen reservering annuleren.
+ *
+ * Geeft een foutmelding terug, of een lege tekst ('') als het gelukt is.
+ */
+function cancelReservation(int $reservationId, ?int $userId = null): string
+{
+    $reservation = $userId === null
+        ? findReservation($reservationId)
+        : findReservationForUser($reservationId, $userId);
+
+    if ($reservation === null) {
+        return 'Deze reservering bestaat niet.';
+    }
+    if ($reservation['status'] === 'cancelled') {
+        return 'Deze reservering is al geannuleerd.';
+    }
+    if (strtotime($reservation['starts_at']) <= time()) {
+        return 'Het evenement is al begonnen. Annuleren kan niet meer.';
+    }
+    if ($reservation['used_count'] > 0) {
+        return 'Er is al een ticket van deze reservering gebruikt bij de ingang. Annuleren kan niet meer.';
     }
 
-    /** Alleen de eigen reservering: een andere ID in de URL geeft null (en dus 404). */
-    public static function findForUser(int $reservationId, int $userId): ?array
-    {
-        $stmt = Database::connection()->prepare(self::SELECT . ' WHERE r.id = ? AND r.user_id = ?');
-        $stmt->execute([$reservationId, $userId]);
-        return $stmt->fetch() ?: null;
+    $query = db()->prepare("UPDATE reservations SET status = 'cancelled', cancelled_at = NOW() WHERE id = ?");
+    $query->execute([$reservationId]);
+
+    $query = db()->prepare("UPDATE tickets SET status = 'cancelled' WHERE reservation_id = ? AND status = 'valid'");
+    $query->execute([$reservationId]);
+
+    return '';
+}
+
+/** Aantal verkochte tickets van een evenement (alleen bevestigde reserveringen). */
+function soldTickets(int $eventId): int
+{
+    $query = db()->prepare("SELECT COALESCE(SUM(quantity), 0) FROM reservations WHERE event_id = ? AND status = 'confirmed'");
+    $query->execute([$eventId]);
+    return (int) $query->fetchColumn();
+}
+
+function findReservation(int $reservationId): ?array
+{
+    $query = db()->prepare(RESERVATION_SELECT . ' WHERE r.id = ?');
+    $query->execute([$reservationId]);
+    return $query->fetch() ?: null;
+}
+
+/** Alleen je eigen reservering. Een ander nummer in de URL geeft null (en dus 404). */
+function findReservationForUser(int $reservationId, int $userId): ?array
+{
+    $query = db()->prepare(RESERVATION_SELECT . ' WHERE r.id = ? AND r.user_id = ?');
+    $query->execute([$reservationId, $userId]);
+    return $query->fetch() ?: null;
+}
+
+function getReservationsForUser(int $userId): array
+{
+    $query = db()->prepare(RESERVATION_SELECT . ' WHERE r.user_id = ? ORDER BY e.starts_at DESC');
+    $query->execute([$userId]);
+    return $query->fetchAll();
+}
+
+/** Voor medewerkers: filteren op status en/of evenement. Leeg = niet filteren. */
+function searchReservations(string $status, ?int $eventId): array
+{
+    $sql = RESERVATION_SELECT . ' WHERE 1 = 1';
+    $params = [];
+
+    if ($status !== '') {
+        $sql .= ' AND r.status = ?';
+        $params[] = $status;
+    }
+    if ($eventId !== null) {
+        $sql .= ' AND r.event_id = ?';
+        $params[] = $eventId;
     }
 
-    /** Voor medewerkers: filteren op status en/of evenement. */
-    public static function search(?string $status, ?int $eventId): array
-    {
-        $sql = self::SELECT . ' WHERE 1 = 1';
-        $params = [];
-        if ($status !== null) {
-            $sql .= ' AND r.status = ?';
-            $params[] = $status;
-        }
-        if ($eventId !== null) {
-            $sql .= ' AND r.event_id = ?';
-            $params[] = $eventId;
-        }
-        $stmt = Database::connection()->prepare($sql . ' ORDER BY r.created_at DESC');
-        $stmt->execute($params);
-        return $stmt->fetchAll();
-    }
+    $query = db()->prepare($sql . ' ORDER BY r.created_at DESC');
+    $query->execute($params);
+    return $query->fetchAll();
+}
 
-    /** Mag de bezoeker deze reservering nog zelf annuleren? (voor het tonen van de knop) */
-    public static function isCancellable(array $reservation): bool
-    {
-        return $reservation['status'] === self::STATUS_CONFIRMED
-            && (int) $reservation['used_count'] === 0
-            && strtotime($reservation['starts_at']) > time();
-    }
+/** Mag deze reservering nog geannuleerd worden? (Bepaalt of we de knop laten zien.) */
+function canCancelReservation(array $reservation): bool
+{
+    return $reservation['status'] === 'confirmed'
+        && $reservation['used_count'] == 0
+        && strtotime($reservation['starts_at']) > time();
+}
+
+function reservationBadge(string $status): string
+{
+    $color = $status === 'confirmed' ? 'success' : 'danger';
+    return badge(RESERVATION_STATUS_LABELS[$status] ?? $status, $color);
 }

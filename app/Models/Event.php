@@ -1,148 +1,170 @@
 <?php
 
-declare(strict_types=1);
+/*
+ * Model: evenementen (tabel events).
+ *
+ * Een evenement heeft een status:
+ *   draft     = concept (nog niet zichtbaar voor bezoekers)
+ *   published = gepubliceerd
+ *   cancelled = geannuleerd
+ */
 
-namespace App\Models;
+const EVENT_STATUS_LABELS = [
+    'draft'     => 'Concept',
+    'published' => 'Gepubliceerd',
+    'cancelled' => 'Geannuleerd',
+];
 
-use App\Core\Database;
+/*
+ * Basisquery voor evenementen. Naast de gegevens van het evenement halen we ook op:
+ * - category_name: de naam van de categorie
+ * - sold: hoeveel tickets er verkocht zijn. Alleen 'confirmed' reserveringen tellen mee,
+ *   dus geannuleerde tickets komen vanzelf weer vrij.
+ */
+const EVENT_SELECT = "
+    SELECT e.*, c.name AS category_name,
+           (SELECT COALESCE(SUM(r.quantity), 0) FROM reservations r
+            WHERE r.event_id = e.id AND r.status = 'confirmed') AS sold
+    FROM events e
+    JOIN categories c ON c.id = e.category_id";
 
-final class Event
+/** Gepubliceerde evenementen in de toekomst. Optioneel filteren op datum en/of categorie. */
+function searchEvents(string $date, ?int $categoryId): array
 {
-    public const STATUS_DRAFT     = 'draft';
-    public const STATUS_PUBLISHED = 'published';
-    public const STATUS_CANCELLED = 'cancelled';
+    $sql = EVENT_SELECT . " WHERE e.status = 'published' AND e.starts_at > NOW()";
+    $params = [];
 
-    public const STATUS_LABELS = [
-        self::STATUS_DRAFT     => 'Concept',
-        self::STATUS_PUBLISHED => 'Gepubliceerd',
-        self::STATUS_CANCELLED => 'Geannuleerd',
-    ];
-
-    /**
-     * Basisquery: evenement + categorienaam + aantal verkochte (niet-geannuleerde) tickets.
-     * "sold" wordt altijd live berekend, zodat geannuleerde tickets direct weer beschikbaar zijn.
-     */
-    private const SELECT = "
-        SELECT e.*, c.name AS category_name,
-               COALESCE((SELECT SUM(r.quantity) FROM reservations r
-                         WHERE r.event_id = e.id AND r.status = 'confirmed'), 0) AS sold
-        FROM events e
-        JOIN categories c ON c.id = e.category_id";
-
-    /** Gepubliceerde, toekomstige evenementen, optioneel gefilterd op datum en categorie. */
-    public static function searchPublished(?string $date, ?int $categoryId): array
-    {
-        $sql = self::SELECT . ' WHERE e.status = :status AND e.starts_at > NOW()';
-        $params = ['status' => self::STATUS_PUBLISHED];
-
-        if ($date !== null) {
-            $sql .= ' AND DATE(e.starts_at) = :date';
-            $params['date'] = $date;
-        }
-        if ($categoryId !== null) {
-            $sql .= ' AND e.category_id = :category';
-            $params['category'] = $categoryId;
-        }
-
-        $stmt = Database::connection()->prepare($sql . ' ORDER BY e.starts_at');
-        $stmt->execute($params);
-        return $stmt->fetchAll();
+    if ($date !== '') {
+        $sql .= ' AND DATE(e.starts_at) = ?';
+        $params[] = $date;
+    }
+    if ($categoryId !== null) {
+        $sql .= ' AND e.category_id = ?';
+        $params[] = $categoryId;
     }
 
-    public static function findPublished(int $id): ?array
-    {
-        $stmt = Database::connection()->prepare(self::SELECT . ' WHERE e.id = ? AND e.status <> ?');
-        $stmt->execute([$id, self::STATUS_DRAFT]);
-        return $stmt->fetch() ?: null;
-    }
+    $query = db()->prepare($sql . ' ORDER BY e.starts_at');
+    $query->execute($params);
+    return $query->fetchAll();
+}
 
-    public static function find(int $id): ?array
-    {
-        $stmt = Database::connection()->prepare(self::SELECT . ' WHERE e.id = ?');
-        $stmt->execute([$id]);
-        return $stmt->fetch() ?: null;
-    }
+/** Eén evenement, ook concepten (voor medewerkers). */
+function findEvent(int $id): ?array
+{
+    $query = db()->prepare(EVENT_SELECT . ' WHERE e.id = ?');
+    $query->execute([$id]);
+    return $query->fetch() ?: null;
+}
 
-    public static function all(): array
-    {
-        return Database::connection()->query(self::SELECT . ' ORDER BY e.starts_at DESC')->fetchAll();
+/** Eén evenement dat bezoekers mogen zien (dus geen concept). */
+function findVisibleEvent(int $id): ?array
+{
+    $event = findEvent($id);
+    if ($event === null || $event['status'] === 'draft') {
+        return null;
     }
+    return $event;
+}
 
-    /** Korte lijst (id + titel) voor filters in het medewerkersgedeelte. */
-    public static function options(): array
-    {
-        return Database::connection()
-            ->query('SELECT id, title, starts_at FROM events ORDER BY starts_at DESC')
-            ->fetchAll();
+function getAllEvents(): array
+{
+    return db()->query(EVENT_SELECT . ' ORDER BY e.starts_at DESC')->fetchAll();
+}
+
+/** Korte lijst (id, titel, datum) voor de keuzelijsten bij de medewerkers. */
+function getEventOptions(): array
+{
+    return db()->query('SELECT id, title, starts_at FROM events ORDER BY starts_at DESC')->fetchAll();
+}
+
+function createEvent(array $data): int
+{
+    $query = db()->prepare(
+        'INSERT INTO events (title, description, program, location, category_id, starts_at,
+                             capacity, sale_starts_at, sale_ends_at, status)
+         VALUES (:title, :description, :program, :location, :category_id, :starts_at,
+                 :capacity, :sale_starts_at, :sale_ends_at, :status)'
+    );
+    $query->execute($data);
+    return (int) db()->lastInsertId();
+}
+
+function updateEvent(int $id, array $data): void
+{
+    $data['id'] = $id;
+    $query = db()->prepare(
+        'UPDATE events SET title = :title, description = :description, program = :program,
+                location = :location, category_id = :category_id, starts_at = :starts_at,
+                capacity = :capacity, sale_starts_at = :sale_starts_at,
+                sale_ends_at = :sale_ends_at, status = :status
+         WHERE id = :id'
+    );
+    $query->execute($data);
+}
+
+function eventHasReservations(int $id): bool
+{
+    $query = db()->prepare('SELECT id FROM reservations WHERE event_id = ? LIMIT 1');
+    $query->execute([$id]);
+    return $query->fetch() !== false;
+}
+
+function deleteEvent(int $id): void
+{
+    $query = db()->prepare('DELETE FROM events WHERE id = ?');
+    $query->execute([$id]);
+}
+
+/** Aantal plaatsen dat nog vrij is. */
+function remainingSeats(array $event): int
+{
+    return max(0, $event['capacity'] - $event['sold']);
+}
+
+/** Het programma staat als losse regels in de database. Dit geeft een lijst van de regels. */
+function programLines(array $event): array
+{
+    $lines = explode("\n", (string) $event['program']);
+    $lines = array_map('trim', $lines);
+    return array_values(array_filter($lines, fn ($line) => $line !== ''));
+}
+
+function eventStatusLabel(string $status): string
+{
+    return EVENT_STATUS_LABELS[$status] ?? $status;
+}
+
+/**
+ * Kan er gereserveerd worden? Geeft terug:
+ *   open  = true als reserveren mag
+ *   label = tekst voor de bezoeker
+ *   color = kleur van het label
+ */
+function saleStatus(array $event): array
+{
+    $now = time();
+    $remaining = remainingSeats($event);
+
+    if ($event['status'] === 'cancelled') {
+        return ['open' => false, 'label' => 'Geannuleerd', 'color' => 'danger'];
     }
-
-    public static function create(array $data): int
-    {
-        $stmt = Database::connection()->prepare(
-            'INSERT INTO events (title, description, program, location, category_id, starts_at,
-                                 capacity, sale_starts_at, sale_ends_at, status)
-             VALUES (:title, :description, :program, :location, :category_id, :starts_at,
-                     :capacity, :sale_starts_at, :sale_ends_at, :status)'
-        );
-        $stmt->execute($data);
-        return (int) Database::connection()->lastInsertId();
+    if ($event['status'] === 'draft') {
+        return ['open' => false, 'label' => 'Concept', 'color' => 'muted'];
     }
-
-    public static function update(int $id, array $data): void
-    {
-        $stmt = Database::connection()->prepare(
-            'UPDATE events SET title = :title, description = :description, program = :program,
-                    location = :location, category_id = :category_id, starts_at = :starts_at,
-                    capacity = :capacity, sale_starts_at = :sale_starts_at,
-                    sale_ends_at = :sale_ends_at, status = :status
-             WHERE id = :id'
-        );
-        $stmt->execute($data + ['id' => $id]);
+    if (strtotime($event['starts_at']) <= $now) {
+        return ['open' => false, 'label' => 'Afgelopen', 'color' => 'muted'];
     }
-
-    public static function hasReservations(int $id): bool
-    {
-        $stmt = Database::connection()->prepare('SELECT 1 FROM reservations WHERE event_id = ? LIMIT 1');
-        $stmt->execute([$id]);
-        return (bool) $stmt->fetchColumn();
+    if ($remaining === 0) {
+        return ['open' => false, 'label' => 'Uitverkocht', 'color' => 'danger'];
     }
-
-    public static function delete(int $id): void
-    {
-        Database::connection()->prepare('DELETE FROM events WHERE id = ?')->execute([$id]);
+    if (strtotime($event['sale_starts_at']) > $now) {
+        return ['open' => false, 'label' => 'Verkoop start op ' . formatDate($event['sale_starts_at']), 'color' => 'info'];
     }
-
-    public static function remaining(array $event): int
-    {
-        return max(0, (int) $event['capacity'] - (int) $event['sold']);
+    if (strtotime($event['sale_ends_at']) < $now) {
+        return ['open' => false, 'label' => 'Verkoop gesloten', 'color' => 'muted'];
     }
-
-    /** Programma staat als regels in de database; geeft een lijst van niet-lege regels. */
-    public static function programLines(array $event): array
-    {
-        $lines = preg_split('/\R/', (string) ($event['program'] ?? '')) ?: [];
-        return array_values(array_filter(array_map('trim', $lines), static fn ($l) => $l !== ''));
+    if ($remaining <= 10) {
+        return ['open' => true, 'label' => 'Bijna uitverkocht', 'color' => 'warning'];
     }
-
-    /**
-     * Bepaalt of er gereserveerd kan worden en welke status (tekst + kleur) getoond wordt.
-     *
-     * @return array{open: bool, label: string, badge: string}
-     */
-    public static function saleState(array $event): array
-    {
-        $now = time();
-        $remaining = self::remaining($event);
-
-        return match (true) {
-            $event['status'] === self::STATUS_CANCELLED   => ['open' => false, 'label' => 'Geannuleerd', 'badge' => 'danger'],
-            $event['status'] === self::STATUS_DRAFT       => ['open' => false, 'label' => 'Concept', 'badge' => 'muted'],
-            strtotime($event['starts_at']) <= $now        => ['open' => false, 'label' => 'Afgelopen', 'badge' => 'muted'],
-            $remaining === 0                              => ['open' => false, 'label' => 'Uitverkocht', 'badge' => 'danger'],
-            strtotime($event['sale_starts_at']) > $now    => ['open' => false, 'label' => 'Verkoop vanaf ' . date('d-m', strtotime($event['sale_starts_at'])), 'badge' => 'info'],
-            strtotime($event['sale_ends_at']) < $now      => ['open' => false, 'label' => 'Verkoop gesloten', 'badge' => 'muted'],
-            $remaining <= max(5, (int) ceil($event['capacity'] * 0.1)) => ['open' => true, 'label' => 'Bijna uitverkocht', 'badge' => 'warning'],
-            default                                       => ['open' => true, 'label' => 'Tickets beschikbaar', 'badge' => 'success'],
-        };
-    }
+    return ['open' => true, 'label' => 'Tickets beschikbaar', 'color' => 'success'];
 }

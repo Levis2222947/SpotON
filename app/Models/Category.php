@@ -1,22 +1,17 @@
 <?php
 
-declare(strict_types=1);
+/*
+ * Model: categorieën (tabel categories), bijv. Concert, Comedy, Workshop.
+ */
 
-namespace App\Models;
-
-use App\Core\Database;
-
-final class Category
+function getCategories(): array
 {
-    public static function all(): array
-    {
-        return Database::connection()->query('SELECT id, name FROM categories ORDER BY name')->fetchAll();
-    }
+    return db()->query('SELECT id, name FROM categories ORDER BY name')->fetchAll();
+}
 
-    public static function exists(int $id): bool
-    {
-        $stmt = Database::connection()->prepare('SELECT 1 FROM categories WHERE id = ?');
-        $stmt->execute([$id]);
-        return (bool) $stmt->fetchColumn();
-    }
+function categoryExists(int $id): bool
+{
+    $query = db()->prepare('SELECT id FROM categories WHERE id = ?');
+    $query->execute([$id]);
+    return $query->fetch() !== false;
 }

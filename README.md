@@ -2,7 +2,7 @@
 
 Compact ticketplatform voor **Poppodium Harbor Stage**: bezoekers zoeken evenementen en reserveren tickets, ticketmedewerkers beheren evenementen en controleren tickets aan de deur met een unieke code.
 
-- **Techniek:** PHP 8+ (zonder framework), MySQL/MariaDB via PDO, eigen CSS (responsive), een klein beetje JavaScript.
+- **Techniek:** PHP 8+ zonder framework en zonder klassen (gewone functies), MySQL/MariaDB via PDO, eigen CSS (responsive), een klein beetje JavaScript.
 - **Definitieve versie:** branch `main`, tag `v1.0.0`.
 
 ## Installatie (lokaal met XAMPP)
@@ -16,7 +16,7 @@ Compact ticketplatform voor **Poppodium Harbor Stage**: bezoekers zoeken eveneme
    ```
    (of importeer beide bestanden via phpMyAdmin).
 4. Kopieer `app/config/config.example.php` naar `app/config/config.local.php` en pas de databasegegevens aan (voor XAMPP werkt de standaard `root` zonder wachtwoord meteen).
-5. Open `http://localhost/SpotON/`.
+5. Open `http://localhost/SpotON/` (of het pad waar je de map hebt neergezet, bijv. `http://localhost/fotoshooty/SpotON/`).
 
 ## Installatie op Plesk
 
@@ -38,21 +38,29 @@ Nieuwe accounts via *Registreren* krijgen altijd de rol **bezoeker**.
 ## Mappenstructuur
 
 ```
+public/
+  index.php           elke pagina begint hier: kiest met een switch welke functie wordt uitgevoerd
+  assets/             CSS en JavaScript
 app/
-  Controllers/        verwerken een verzoek (één controller per onderdeel)
-    Staff/            controllers die alleen medewerkers mogen gebruiken
-  Core/               herbruikbare basis: router, database, sessie/auth, CSRF, validatie, views
-  Models/             alle databasequery's (User, Event, Reservation, Ticket)
-  views/              HTML-templates, per onderdeel een map
-  config/             instellingen
-  bootstrap.php       laadt config, autoloader, sessie en foutafhandeling
-  routes.php          overzicht van alle routes
-  helpers.php         kleine hulpfuncties (e(), url(), datums)
-database/             schema.sql en seed.sql
-docs/                 verantwoording: eisen ↔ ontwerp ↔ planning, verschillen, testplan
-public/               documentroot: index.php (front controller) en assets
+  bootstrap.php       laadt de instellingen, alle functies en start de sessie
+  helpers.php         kleine hulpfuncties: e(), url(), redirect(), inputInt(), formatDate() ...
+  config/             instellingen (database, maximaal aantal tickets)
+  Core/               basis: database.php, view.php, auth.php (inloggen/rollen), csrf.php
+  Models/             alle databasequery's, één bestand per tabel (Event.php, Reservation.php ...)
+  Controllers/        één functie per pagina of formulier (bijv. showEventList(), handleReserve())
+    Staff/            functies die alleen medewerkers mogen gebruiken
+  views/              de HTML van elke pagina, per onderdeel een map
+database/             schema.sql (tabellen) en seed.sql (testdata)
+docs/                 verantwoording: eisen ↔ ontwerp ↔ planning, verschillen, beveiliging, testplan
 storage/logs/         foutlogboek
 ```
+
+### Zo werkt één pagina (voorbeeld: `index.php?page=event&id=1`)
+
+1. `public/index.php` laadt `app/bootstrap.php` en ziet `page=event`.
+2. De `switch` roept de controllerfunctie `showEventDetail()` aan.
+3. Die vraagt het model om het evenement: `findVisibleEvent(1)` (een SQL-query met `?`).
+4. Daarna toont `view('events/show', [...])` de HTML met de gegevens.
 
 ## Documentatie
 
