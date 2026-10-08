@@ -7,21 +7,21 @@
         <div class="form-group">
             <label for="name">Naam:</label>
             <input type="text" id="name" name="name" value="<?= e($old['name'] ?? '') ?>"
-                   autocomplete="name" maxlength="100" placeholder="Voer uw naam in" required<?= fieldAria($errors, 'name') ?>>
+                   autocomplete="name" maxlength="100" placeholder="Voer uw naam in" required>
             <?= fieldError($errors, 'name') ?>
         </div>
 
         <div class="form-group">
             <label for="email">E-mailadres:</label>
             <input type="email" id="email" name="email" value="<?= e($old['email'] ?? '') ?>"
-                   autocomplete="email" maxlength="190" placeholder="Voer uw e-mailadres in" required<?= fieldAria($errors, 'email') ?>>
+                   autocomplete="email" maxlength="190" placeholder="Voer uw e-mailadres in" required>
             <?= fieldError($errors, 'email') ?>
         </div>
 
         <div class="form-group">
             <label for="password">Wachtwoord:</label>
             <input type="password" id="password" name="password" autocomplete="new-password"
-                   minlength="8" placeholder="Voer uw wachtwoord in" required<?= fieldAria($errors, 'password') ?>>
+                   minlength="8" placeholder="Voer uw wachtwoord in" required>
             <span class="hint">Minimaal 8 tekens, waarvan minimaal één cijfer.</span>
             <?= fieldError($errors, 'password') ?>
         </div>
@@ -29,7 +29,7 @@
         <div class="form-group">
             <label for="password_confirm">Wachtwoord bevestigen:</label>
             <input type="password" id="password_confirm" name="password_confirm" autocomplete="new-password"
-                   placeholder="Bevestig uw wachtwoord" required<?= fieldAria($errors, 'password_confirm') ?>>
+                   placeholder="Bevestig uw wachtwoord" required>
             <?= fieldError($errors, 'password_confirm') ?>
         </div>
 

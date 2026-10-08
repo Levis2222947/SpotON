@@ -1,6 +1,7 @@
 <?php
+// Hoeveel plaatsen zijn er nog, en hoeveel tickets mag je maximaal kiezen?
 $remaining = remainingSeats($event);
-$maxQuantity = min($remaining, (int) CONFIG['max_tickets_per_reservation']);
+$maxQuantity = maxTicketsFor($event);
 ?>
 <p><a class="btn btn--gray btn--small" href="<?= e(url()) ?>">Terug naar evenementen</a></p>
 
@@ -10,7 +11,7 @@ $maxQuantity = min($remaining, (int) CONFIG['max_tickets_per_reservation']);
     <div class="details">
         <p><strong>Datum:</strong> <?= e(formatDate($event['starts_at'])) ?></p>
         <p><strong>Tijd:</strong> <?= e(formatTime($event['starts_at'])) ?></p>
-        <p><strong>Locatie:</strong> <?= e($event['location']) ?>, <?= e(CONFIG['venue']) ?></p>
+        <p><strong>Locatie:</strong> <?= e($event['location']) ?>, Harbor Stage</p>
         <p><strong>Categorie:</strong> <?= e($event['category_name']) ?></p>
         <p><strong>Beschikbare plaatsen:</strong> <?= $remaining ?> van <?= (int) $event['capacity'] ?></p>
         <p><strong>Verkoop:</strong> <?= e(formatDateTime($event['sale_starts_at'])) ?> t/m <?= e(formatDateTime($event['sale_ends_at'])) ?></p>

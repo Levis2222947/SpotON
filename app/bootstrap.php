@@ -1,23 +1,19 @@
 <?php
 
-/*
- * Dit bestand wordt als eerste geladen (vanuit public/index.php).
- * Het zet alles klaar wat elke pagina nodig heeft.
- */
+// Wordt als eerste geladen (vanuit public/index.php). Zet alles klaar voor elke pagina.
 
 define('APP_ROOT', dirname(__DIR__));
 
-// 1. Instellingen laden (database, naam van de zaal, ...)
+// Instellingen laden
 define('CONFIG', require __DIR__ . '/config/config.php');
 date_default_timezone_set(CONFIG['timezone']);
 
-// 2. Fouten niet aan de bezoeker laten zien, maar opslaan in een logbestand
+// Fouten niet aan de bezoeker laten zien, maar opslaan in storage/logs/error.log
 ini_set('display_errors', CONFIG['debug'] ? '1' : '0');
 ini_set('log_errors', '1');
 ini_set('error_log', APP_ROOT . '/storage/logs/error.log');
-error_reporting(E_ALL);
 
-// 3. Alle functies laden
+// Al mijn functies laden
 require __DIR__ . '/helpers.php';
 require __DIR__ . '/Core/database.php';
 require __DIR__ . '/Core/view.php';
@@ -37,32 +33,14 @@ require __DIR__ . '/Controllers/Staff/EventController.php';
 require __DIR__ . '/Controllers/Staff/ReservationController.php';
 require __DIR__ . '/Controllers/Staff/ScanController.php';
 
-// 4. Gaat er onverwacht iets mis? Dan schrijven we de fout in het logboek
-//    en ziet de bezoeker een nette foutpagina.
-set_exception_handler(function (Throwable $error): void {
-    error_log((string) $error);
-    while (ob_get_level() > 0) {
-        ob_end_clean();
-    }
-    view('errors/500', [
-        'title'   => 'Er ging iets mis',
-        'details' => CONFIG['debug'] ? $error->getMessage() : null,
-    ], 500);
-});
+// Onverwachte fout (bijv. database staat uit)? Dan opslaan in het log en een nette foutpagina tonen.
+function handleUnexpectedError($error)
+{
+    error_log($error);
+    view('errors/500', ['title' => 'Er ging iets mis', 'details' => CONFIG['debug'] ? $error->getMessage() : '']);
+}
+set_exception_handler('handleUnexpectedError');
 
-// 5. Extra beveiliging voor de browser
-header('X-Content-Type-Options: nosniff');
-header('X-Frame-Options: DENY');
-header('Referrer-Policy: same-origin');
-
-// 6. Sessie starten: zo onthoudt de website wie er ingelogd is.
-//    httponly = JavaScript kan het sessiecookie niet lezen.
-session_name('spoton_session');
-session_set_cookie_params([
-    'path'     => '/',
-    'secure'   => !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off',
-    'httponly' => true,
-    'samesite' => 'Lax',
-]);
-ini_set('session.use_strict_mode', '1');
-session_start();
+// Sessie starten, zodat de site onthoudt wie er ingelogd is.
+// httponly: JavaScript kan het cookie niet lezen.
+session_start(['cookie_httponly' => true, 'cookie_samesite' => 'Lax']);

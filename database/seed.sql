@@ -1,6 +1,6 @@
--- SpotOn – testdata (fictief, geen echte persoonsgegevens)
+-- SpotOn: testdata (verzonnen, geen echte personen)
 -- Wachtwoord van beide accounts: Welkom123!
--- Datums zijn relatief aan NOW(), zodat de evenementen altijd in de toekomst liggen.
+-- De datums reken ik uit vanaf NOW(), zodat de evenementen altijd in de toekomst liggen.
 
 INSERT INTO users (id, name, email, password_hash, role) VALUES
 (1, 'E. Jansen',     'medewerker@spoton.test', '$2y$10$o1yUUTwEC.PwXQiLeK7aWe6agwdHlqJ176AApnISA07BQSWn0f2FO', 'staff'),

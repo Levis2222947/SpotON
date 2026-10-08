@@ -1,57 +1,53 @@
 <?php
 
-/*
- * Inloggen en rollen.
- * Er zijn twee rollen: 'visitor' (bezoeker) en 'staff' (ticketmedewerker).
- * De ingelogde gebruiker staat in de sessie: $_SESSION['user'].
- */
+// Inloggen en rollen. Rollen: 'visitor' (bezoeker) en 'staff' (medewerker).
+// De ingelogde gebruiker staat in $_SESSION['user'].
 
-function currentUser(): ?array
+function currentUser()
 {
     return $_SESSION['user'] ?? null;
 }
 
-function currentUserId(): int
+function currentUserId()
 {
-    return (int) ($_SESSION['user']['id'] ?? 0);
+    return $_SESSION['user']['id'] ?? 0;
 }
 
-function isLoggedIn(): bool
+function isLoggedIn()
 {
-    return currentUser() !== null;
+    return isset($_SESSION['user']);
 }
 
-function isStaff(): bool
+function isStaff()
 {
-    return (currentUser()['role'] ?? '') === 'staff';
+    return isLoggedIn() && $_SESSION['user']['role'] === 'staff';
 }
 
-function isVisitor(): bool
+function isVisitor()
 {
-    return (currentUser()['role'] ?? '') === 'visitor';
+    return isLoggedIn() && $_SESSION['user']['role'] === 'visitor';
 }
 
-function loginUser(array $user): void
+function loginUser($user)
 {
-    // Nieuw sessie-ID na inloggen, zodat niemand een oud sessie-ID kan misbruiken.
-    session_regenerate_id(true);
+    session_regenerate_id(true); // nieuw sessie-id, zodat een oud id niet misbruikt kan worden
 
     $_SESSION['user'] = [
-        'id'    => (int) $user['id'],
+        'id'    => $user['id'],
         'name'  => $user['name'],
         'email' => $user['email'],
         'role'  => $user['role'],
     ];
 }
 
-function logoutUser(): void
+function logoutUser()
 {
     unset($_SESSION['user']);
     session_regenerate_id(true);
 }
 
-/** Niet ingelogd? Dan naar het inlogscherm. */
-function requireLogin(): void
+// Niet ingelogd? Naar het inlogscherm.
+function requireLogin()
 {
     if (!isLoggedIn()) {
         setFlash('info', 'Log eerst in om verder te gaan.');
@@ -59,8 +55,8 @@ function requireLogin(): void
     }
 }
 
-/** Alleen medewerkers mogen verder. */
-function requireStaff(): void
+// Alleen voor medewerkers.
+function requireStaff()
 {
     requireLogin();
     if (!isStaff()) {
@@ -68,8 +64,8 @@ function requireStaff(): void
     }
 }
 
-/** Alleen bezoekers mogen verder (medewerkers reserveren geen tickets). */
-function requireVisitor(): void
+// Alleen voor bezoekers.
+function requireVisitor()
 {
     requireLogin();
     if (!isVisitor()) {

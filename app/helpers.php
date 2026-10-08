@@ -1,102 +1,104 @@
 <?php
 
-/*
- * Kleine hulpfuncties die overal gebruikt worden.
- */
+// Kleine hulpfuncties die ik overal gebruik.
 
-/**
- * Tekst veilig in de HTML zetten. Typt iemand <script> als naam,
- * dan wordt dat gewoon als tekst getoond en niet uitgevoerd (bescherming tegen XSS).
- */
-function e(mixed $value): string
+// Tekst veilig tonen. <script> wordt gewoon tekst en wordt niet uitgevoerd (tegen XSS).
+function e($text)
 {
-    return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
+    return htmlspecialchars((string) $text, ENT_QUOTES, 'UTF-8');
 }
 
-/** Map waarin de website staat, bijv. "/fotoshooty/SpotON/public" op XAMPP of "" op Plesk. */
-function baseUrl(): string
+// De map van de site, bijv. "/fotoshooty/SpotON/public".
+function baseUrl()
 {
     return rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'])), '/');
 }
 
-/** Link naar een pagina, bijv. url('event', ['id' => 3]) wordt index.php?page=event&id=3 */
-function url(string $page = 'home', array $params = []): string
+// Link naar een pagina. url('event', ['id' => 3]) wordt index.php?page=event&id=3
+function url($page = 'home', $params = [])
 {
     if ($page === 'home' && $params === []) {
         return baseUrl() . '/';
     }
-    return baseUrl() . '/index.php?' . http_build_query(['page' => $page] + $params);
+
+    $link = baseUrl() . '/index.php?page=' . urlencode($page);
+    foreach ($params as $key => $value) {
+        $link .= '&' . $key . '=' . urlencode($value);
+    }
+    return $link;
 }
 
-/** Stuurt de browser door naar een andere pagina en stopt daarna. */
-function redirect(string $page = 'home', array $params = []): never
+// Naar een andere pagina sturen en stoppen.
+function redirect($page = 'home', $params = [])
 {
     header('Location: ' . url($page, $params));
     exit;
 }
 
-/** Link naar een CSS- of JavaScript-bestand. */
-function asset(string $path): string
+// Link naar een CSS-bestand.
+function asset($path)
 {
     return baseUrl() . '/assets/' . $path;
 }
 
-/** Haalt een heel getal (groter dan 0) uit de URL of het formulier. Geen geldig getal? Dan null. */
-function inputInt(string $key): ?int
-{
-    $value = filter_var($_REQUEST[$key] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
-    return $value === false ? null : $value;
-}
-
-/** Haalt tekst uit de URL of het formulier, zonder spaties aan het begin en eind. */
-function inputText(string $key): string
+// Getal uit de URL of het formulier. Geen getal (of kleiner dan 1)? Dan null.
+function inputInt($key)
 {
     $value = $_REQUEST[$key] ?? '';
-    return is_string($value) ? trim($value) : '';
+
+    if (!is_numeric($value) || $value < 1) {
+        return null;
+    }
+    return (int) $value;
 }
 
-/** Controleert of een datum echt bestaat, bijv. isValidDate('2026-10-18', 'Y-m-d'). */
-function isValidDate(string $value, string $format): bool
+// Tekst uit de URL of het formulier, zonder spaties aan het begin en eind.
+function inputText($key)
 {
-    $date = DateTime::createFromFormat($format, $value);
-    return $date !== false && $date->format($format) === $value;
+    $value = $_REQUEST[$key] ?? '';
+
+    if (!is_string($value)) {
+        return '';
+    }
+    return trim($value);
 }
 
-/** Foutmelding onder een formulierveld. */
-function fieldError(array $errors, string $field): string
+// Bestaat deze datum echt? '2026-02-31' bestaat bijvoorbeeld niet.
+function isValidDate($value, $format)
+{
+    $time = strtotime($value);
+    return $time !== false && date($format, $time) === $value;
+}
+
+// Foutmelding onder een formulierveld.
+function fieldError($errors, $field)
 {
     if (!isset($errors[$field])) {
         return '';
     }
-    return '<p class="field-error" id="' . e($field) . '-error">' . e($errors[$field]) . '</p>';
+    return '<p class="field-error">' . e($errors[$field]) . '</p>';
 }
 
-/** Markeert een veld met een fout, zodat ook een schermlezer de fout voorleest. */
-function fieldAria(array $errors, string $field): string
+// Gekleurd label met tekst. $color: success, danger, warning, info of muted.
+function badge($label, $color)
 {
-    return isset($errors[$field]) ? ' aria-invalid="true" aria-describedby="' . e($field) . '-error"' : '';
+    return '<span class="badge badge--' . $color . '">' . e($label) . '</span>';
 }
 
-/** Statuslabel: altijd een kleur én een tekst. $color is success, danger, warning, info of muted. */
-function badge(string $label, string $color): string
-{
-    return '<span class="badge badge--' . e($color) . '">' . e($label) . '</span>';
-}
-
-/** "18-10-2026" */
-function formatDate(string $datetime): string
+function formatDate($datetime)
 {
     return date('d-m-Y', strtotime($datetime));
 }
 
-/** "20:00" */
-function formatTime(string $datetime): string
+function formatTime($datetime)
 {
     return date('H:i', strtotime($datetime));
 }
 
-/** "18-10-2026 20:00" */
-function formatDateTime(?string $datetime): string
+function formatDateTime($datetime)
 {
-    return $datetime ? date('d-m-Y H:i', strtotime($datetime)) : '–';
+    if (!$datetime) {
+        return '-';
+    }
+    return date('d-m-Y H:i', strtotime($datetime));
 }

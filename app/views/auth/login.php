@@ -7,14 +7,14 @@
         <div class="form-group">
             <label for="email">E-mailadres:</label>
             <input type="email" id="email" name="email" value="<?= e($old['email'] ?? '') ?>"
-                   autocomplete="email" placeholder="Voer uw e-mailadres in" required<?= fieldAria($errors, 'email') ?>>
+                   autocomplete="email" placeholder="Voer uw e-mailadres in" required>
             <?= fieldError($errors, 'email') ?>
         </div>
 
         <div class="form-group">
             <label for="password">Wachtwoord:</label>
             <input type="password" id="password" name="password" autocomplete="current-password"
-                   placeholder="Voer uw wachtwoord in" required<?= fieldAria($errors, 'password') ?>>
+                   placeholder="Voer uw wachtwoord in" required>
             <?= fieldError($errors, 'password') ?>
         </div>
 

@@ -1,14 +1,11 @@
 <?php
 
-/*
- * Controller voor medewerkers: evenementen aanmaken, wijzigen en verwijderen.
- * Alleen voor medewerkers (dat wordt gecontroleerd in public/index.php).
- */
+// Controller: evenementen beheren (alleen medewerkers, zie index.php)
 
-// Zo ziet de datum eruit in een <input type="datetime-local">, bijv. 2026-10-18T20:00
+// Datum zoals in <input type="datetime-local">, bijv. 2026-10-18T20:00
 const FORM_DATE_FORMAT = 'Y-m-d\TH:i';
 
-function showStaffEvents(): void
+function showStaffEvents()
 {
     view('staff/events/index', [
         'title'  => 'Evenementbeheer',
@@ -16,12 +13,13 @@ function showStaffEvents(): void
     ]);
 }
 
-function showNewEventForm(): void
+function showNewEventForm()
 {
+    // Nieuw evenement: concept met 100 plaatsen
     showEventForm(null, ['status' => 'draft', 'capacity' => '100'], []);
 }
 
-function handleCreateEvent(): void
+function handleCreateEvent()
 {
     $errors = checkEventForm(null);
 
@@ -32,24 +30,25 @@ function handleCreateEvent(): void
 
     $data = eventFormData();
     $eventId = createEvent($data);
+
     setFlash('success', 'Evenement "' . $data['title'] . '" is aangemaakt.');
     redirect('staff/events/edit', ['id' => $eventId]);
 }
 
-function showEditEventForm(): void
+function showEditEventForm()
 {
     $event = findEventOr404();
 
-    // Datums uit de database omzetten naar het formaat van het formulier
+    // Datums omzetten naar het formaat van het formulier
     $values = $event;
-    foreach (['starts_at', 'sale_starts_at', 'sale_ends_at'] as $field) {
-        $values[$field] = date(FORM_DATE_FORMAT, strtotime($event[$field]));
-    }
+    $values['starts_at'] = date(FORM_DATE_FORMAT, strtotime($event['starts_at']));
+    $values['sale_starts_at'] = date(FORM_DATE_FORMAT, strtotime($event['sale_starts_at']));
+    $values['sale_ends_at'] = date(FORM_DATE_FORMAT, strtotime($event['sale_ends_at']));
 
     showEventForm($event, $values, []);
 }
 
-function handleUpdateEvent(): void
+function handleUpdateEvent()
 {
     $event = findEventOr404();
     $errors = checkEventForm($event);
@@ -61,42 +60,44 @@ function handleUpdateEvent(): void
 
     $data = eventFormData();
     updateEvent($event['id'], $data);
+
     setFlash('success', 'Evenement "' . $data['title'] . '" is opgeslagen.');
     redirect('staff/events');
 }
 
-function handleDeleteEvent(): void
+function handleDeleteEvent()
 {
     $event = findEventOr404();
 
-    // Een evenement met reserveringen verwijderen we niet, anders verdwijnen de tickets.
+    // Met reserveringen niet verwijderen, anders zijn de tickets van mensen weg
     if (eventHasReservations($event['id'])) {
         setFlash('error', 'Dit evenement heeft al reserveringen en kan niet worden verwijderd. Zet de status op "Geannuleerd".');
     } else {
         deleteEvent($event['id']);
         setFlash('success', 'Evenement "' . $event['title'] . '" is verwijderd.');
     }
+
     redirect('staff/events');
 }
 
-function findEventOr404(): array
+// Evenement uit de URL ophalen, anders 404.
+function findEventOr404()
 {
-    $event = findEvent(inputInt('id') ?? 0);
+    $event = findEvent(inputInt('id'));
+
     if ($event === null) {
         showError(404, 'Dit evenement bestaat niet.');
     }
     return $event;
 }
 
-/**
- * Controleert alle velden van het formulier.
- * Geeft een lijst met fouten terug: ['veldnaam' => 'foutmelding']. Leeg = alles goed.
- * $existingEvent is null bij een nieuw evenement.
- */
-function checkEventForm(?array $existingEvent): array
+// Alle velden checken. Geeft ['veld' => 'fout'] terug, leeg = alles goed.
+// $existingEvent is null bij een nieuw evenement.
+function checkEventForm($existingEvent)
 {
     $errors = [];
 
+    // 1. Verplichte velden
     $requiredFields = [
         'title'          => 'Vul de naam van het evenement in.',
         'description'    => 'Vul een beschrijving in.',
@@ -113,6 +114,7 @@ function checkEventForm(?array $existingEvent): array
         }
     }
 
+    // 2. Niet te lang
     if (strlen(inputText('title')) > 150) {
         $errors['title'] = 'De naam mag maximaal 150 tekens lang zijn.';
     }
@@ -120,33 +122,36 @@ function checkEventForm(?array $existingEvent): array
         $errors['location'] = 'De locatie mag maximaal 150 tekens lang zijn.';
     }
 
-    if (!isset($errors['category_id']) && !categoryExists(inputInt('category_id') ?? 0)) {
+    // 3. Bestaat de categorie en is de status goed?
+    if (!isset($errors['category_id']) && !categoryExists(inputInt('category_id'))) {
         $errors['category_id'] = 'Kies een bestaande categorie.';
     }
-
-    if (!array_key_exists(inputText('status'), EVENT_STATUS_LABELS)) {
+    if (!isset(EVENT_STATUS_LABELS[inputText('status')])) {
         $errors['status'] = 'Kies een geldige status.';
     }
 
-    // Capaciteit: een heel getal, en nooit minder dan het aantal tickets dat al verkocht is
+    // 4. Capaciteit: niet minder dan het aantal verkochte tickets
     $capacity = inputInt('capacity');
-    if (!isset($errors['capacity']) && ($capacity === null || $capacity > 100000)) {
-        $errors['capacity'] = 'De capaciteit moet een getal zijn tussen 1 en 100000.';
-    } elseif ($existingEvent !== null && $capacity !== null) {
-        $sold = soldTickets($existingEvent['id']);
-        if ($capacity < $sold) {
-            $errors['capacity'] = "Er zijn al {$sold} tickets verkocht. De capaciteit kan niet lager zijn dan {$sold}.";
+    if (!isset($errors['capacity'])) {
+        if ($capacity === null || $capacity > 100000) {
+            $errors['capacity'] = 'De capaciteit moet een getal zijn tussen 1 en 100000.';
+        } elseif ($existingEvent !== null) {
+            $sold = soldTickets($existingEvent['id']);
+            if ($capacity < $sold) {
+                $errors['capacity'] = 'Er zijn al ' . $sold . ' tickets verkocht. De capaciteit kan niet lager zijn dan ' . $sold . '.';
+            }
         }
     }
 
-    // Datums controleren
+    // 5. Echte datums?
     foreach (['starts_at', 'sale_starts_at', 'sale_ends_at'] as $field) {
         if (!isset($errors[$field]) && !isValidDate(inputText($field), FORM_DATE_FORMAT)) {
             $errors[$field] = 'Dit is geen geldige datum.';
         }
     }
 
-    if (!isset($errors['starts_at'], $errors['sale_starts_at'], $errors['sale_ends_at'])) {
+    // 6. Kloppen de datums met elkaar?
+    if (!isset($errors['starts_at']) && !isset($errors['sale_starts_at']) && !isset($errors['sale_ends_at'])) {
         $startsAt = strtotime(inputText('starts_at'));
         $saleStart = strtotime(inputText('sale_starts_at'));
         $saleEnd = strtotime(inputText('sale_ends_at'));
@@ -154,6 +159,7 @@ function checkEventForm(?array $existingEvent): array
         if ($existingEvent === null && $startsAt <= time()) {
             $errors['starts_at'] = 'Een nieuw evenement moet in de toekomst zijn.';
         }
+
         if ($saleStart >= $saleEnd) {
             $errors['sale_ends_at'] = 'Het einde van de verkoop moet na de start van de verkoop zijn.';
         } elseif ($saleEnd > $startsAt) {
@@ -164,8 +170,8 @@ function checkEventForm(?array $existingEvent): array
     return $errors;
 }
 
-/** Zet de ingevulde velden klaar om op te slaan in de database. */
-function eventFormData(): array
+// Ingevulde velden klaarzetten voor de database (zelfde volgorde als in de SQL).
+function eventFormData()
 {
     return [
         'title'          => inputText('title'),
@@ -181,10 +187,17 @@ function eventFormData(): array
     ];
 }
 
-function showEventForm(?array $event, array $values, array $errors, int $statusCode = 200): void
+// Formulier tonen, voor nieuw én bewerken.
+function showEventForm($event, $values, $errors, $statusCode = 200)
 {
+    if ($event === null) {
+        $title = 'Nieuw evenement';
+    } else {
+        $title = 'Evenement bewerken';
+    }
+
     view('staff/events/form', [
-        'title'      => $event === null ? 'Nieuw evenement' : 'Evenement bewerken',
+        'title'      => $title,
         'event'      => $event,
         'values'     => $values,
         'errors'     => $errors,

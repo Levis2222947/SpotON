@@ -1,5 +1,5 @@
-# Alle verzoeken naar de map public/ sturen.
-# Hierdoor zijn app/, database/ en storage/ nooit direct via de browser op te vragen.
+# Alle verzoeken stuur ik door naar de map public/.
+# Zo kan niemand via de browser bij app/, database/ of storage/ komen.
 RewriteEngine On
 RewriteRule ^$ public/ [L]
 RewriteRule ^((?!public/).*)$ public/$1 [L]

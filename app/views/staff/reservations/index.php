@@ -1,6 +1,3 @@
-<?php
-/** @var array $reservations @var array $events @var array $filters @var bool $isFiltered @var int $ticketTotal */
-?>
 <h1 class="text-center">Reserveringen</h1>
 
 <form class="filter-bar" method="get" action="<?= e(baseUrl() . '/index.php') ?>">
@@ -71,7 +68,7 @@
                     <td class="actions">
                         <?php if (canCancelReservation($reservation)): ?>
                             <form method="post" action="<?= e(url('staff/reservations/cancel')) ?>"
-                                  data-confirm="Reservering #<?= (int) $reservation['id'] ?> annuleren? De tickets worden ongeldig.">
+                                  onsubmit="return confirm('Deze reservering annuleren? De tickets worden ongeldig.')">
                                 <?= csrfField() ?>
                                 <input type="hidden" name="id" value="<?= (int) $reservation['id'] ?>">
                                 <input type="hidden" name="filter_status" value="<?= e($filters['status']) ?>">

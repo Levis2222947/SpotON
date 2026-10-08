@@ -1,16 +1,15 @@
 <?php
 
-/*
- * Controller: evenementen bekijken. Deze pagina's zijn voor iedereen.
- */
+// Controller: evenementen bekijken (voor iedereen)
 
-/** Home: lijst met evenementen, met zoeken op datum en categorie. */
-function showEventList(): void
+// Homepagina met zoeken op datum en categorie.
+function showEventList()
 {
     $date = inputText('date');
     $categoryId = inputInt('category');
     $filterError = '';
 
+    // Ongeldige datum? Dan niet op datum zoeken.
     if ($date !== '' && !isValidDate($date, 'Y-m-d')) {
         $filterError = 'De gekozen datum is ongeldig. Er wordt niet op datum gezocht.';
         $date = '';
@@ -26,10 +25,10 @@ function showEventList(): void
     ]);
 }
 
-/** Detailpagina van één evenement. */
-function showEventDetail(): void
+// Detailpagina van één evenement.
+function showEventDetail()
 {
-    $event = findVisibleEvent(inputInt('id') ?? 0);
+    $event = findVisibleEvent(inputInt('id'));
 
     if ($event === null) {
         showError(404, 'Dit evenement bestaat niet of is niet meer zichtbaar.');

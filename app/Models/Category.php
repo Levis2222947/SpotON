@@ -1,15 +1,13 @@
 <?php
 
-/*
- * Model: categorieën (tabel categories), bijv. Concert, Comedy, Workshop.
- */
+// Model: categorieën (tabel categories)
 
-function getCategories(): array
+function getCategories()
 {
     return db()->query('SELECT id, name FROM categories ORDER BY name')->fetchAll();
 }
 
-function categoryExists(int $id): bool
+function categoryExists($id)
 {
     $query = db()->prepare('SELECT id FROM categories WHERE id = ?');
     $query->execute([$id]);

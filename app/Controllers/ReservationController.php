@@ -1,18 +1,21 @@
 <?php
 
-/*
- * Controller: tickets reserveren en je eigen reserveringen beheren.
- * Alleen voor bezoekers (dat wordt gecontroleerd in public/index.php).
- */
+// Controller: tickets reserveren en eigen reserveringen (alleen bezoekers, zie index.php)
 
-/** Stap 1: het bevestigingsscherm met het aantal tickets. */
-function showReserveForm(): void
+// Scherm om het aantal tickets te bevestigen.
+function showReserveForm()
 {
-    $event = findOpenEvent(inputInt('event') ?? 0);
+    $event = findOpenEvent(inputInt('event'));
     $maxQuantity = maxTicketsFor($event);
 
-    // Aantal uit de URL, maar altijd tussen 1 en het maximum
-    $quantity = min(inputInt('quantity') ?? 1, $maxQuantity);
+    // Aantal uit de URL, maar niet meer dan het maximum
+    $quantity = inputInt('quantity');
+    if ($quantity === null) {
+        $quantity = 1;
+    }
+    if ($quantity > $maxQuantity) {
+        $quantity = $maxQuantity;
+    }
 
     view('reservations/create', [
         'title'       => 'Tickets reserveren',
@@ -23,38 +26,45 @@ function showReserveForm(): void
     ]);
 }
 
-/** Stap 2: de bezoeker klikt op "Reservering bevestigen". */
-function handleReserve(): void
+// Bezoeker klikt op "Reservering bevestigen".
+function handleReserve()
 {
-    $event = findOpenEvent(inputInt('event') ?? 0);
+    $event = findOpenEvent(inputInt('event'));
     $maxQuantity = maxTicketsFor($event);
     $quantity = inputInt('quantity');
     $errors = [];
 
     if ($quantity === null || $quantity > $maxQuantity) {
-        $errors['quantity'] = "Kies een aantal tussen 1 en {$maxQuantity}.";
+        $errors['quantity'] = 'Kies een aantal tussen 1 en ' . $maxQuantity . '.';
     } else {
         $result = createReservation(currentUserId(), $event['id'], $quantity);
 
+        // Gelukt? Naar de pagina met je tickets.
         if ($result['error'] === '') {
-            setFlash('success', "Uw reservering is bevestigd! Hieronder staan uw {$quantity} ticket(s).");
+            setFlash('success', 'Uw reservering is bevestigd! Hieronder staan uw ' . $quantity . ' ticket(s).');
             redirect('reservation', ['id' => $result['id']]);
         }
 
         $errors['quantity'] = $result['error'];
-        $event = findVisibleEvent($event['id']); // opnieuw ophalen: misschien zijn er net plaatsen verkocht
+
+        // Opnieuw ophalen, misschien zijn er net plaatsen verkocht
+        $event = findVisibleEvent($event['id']);
+    }
+
+    if ($quantity === null) {
+        $quantity = 1;
     }
 
     view('reservations/create', [
         'title'       => 'Tickets reserveren',
         'event'       => $event,
-        'quantity'    => $quantity ?? 1,
+        'quantity'    => $quantity,
         'maxQuantity' => maxTicketsFor($event),
         'errors'      => $errors,
     ], 422);
 }
 
-function showMyReservations(): void
+function showMyReservations()
 {
     view('reservations/index', [
         'title'        => 'Mijn reserveringen',
@@ -62,10 +72,10 @@ function showMyReservations(): void
     ]);
 }
 
-/** Eén reservering met de ticketcodes. */
-function showReservation(): void
+// Eén reservering met de ticketcodes.
+function showReservation()
 {
-    $reservation = findReservationForUser(inputInt('id') ?? 0, currentUserId());
+    $reservation = findReservationForUser(inputInt('id'), currentUserId());
 
     if ($reservation === null) {
         showError(404, 'Deze reservering bestaat niet of is niet van u.');
@@ -78,20 +88,21 @@ function showReservation(): void
     ]);
 }
 
-function handleCancelReservation(): void
+function handleCancelReservation()
 {
-    $error = cancelReservation(inputInt('id') ?? 0, currentUserId());
+    $error = cancelReservation(inputInt('id'), currentUserId());
 
     if ($error === '') {
         setFlash('success', 'Uw reservering is geannuleerd. De plaatsen zijn weer vrij.');
     } else {
         setFlash('error', $error);
     }
+
     redirect('my-reservations');
 }
 
-/** Zoekt het evenement op en controleert of je er nog tickets voor kunt reserveren. */
-function findOpenEvent(int $eventId): array
+// Evenement ophalen en checken of je nog kunt reserveren.
+function findOpenEvent($eventId)
 {
     $event = findVisibleEvent($eventId);
 
@@ -108,8 +119,14 @@ function findOpenEvent(int $eventId): array
     return $event;
 }
 
-/** Je mag niet meer tickets kiezen dan er vrij zijn, en niet meer dan het maximum per reservering. */
-function maxTicketsFor(array $event): int
+// Maximaal aantal tickets: niet meer dan er vrij zijn en niet meer dan 10.
+function maxTicketsFor($event)
 {
-    return min(remainingSeats($event), CONFIG['max_tickets_per_reservation']);
+    $remaining = remainingSeats($event);
+    $max = CONFIG['max_tickets_per_reservation'];
+
+    if ($remaining < $max) {
+        return $remaining;
+    }
+    return $max;
 }

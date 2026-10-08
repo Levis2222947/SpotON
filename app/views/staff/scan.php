@@ -1,9 +1,5 @@
 <?php
-/**
- * @var array $events @var ?array $event @var ?array $counts @var ?array $scanResult @var array $errors
- */
-
-// Uitkomst van de scan -> opvallende status met kleur én tekst
+// Per uitkomst van de scan: welke kleur (class) en welke tekst ik laat zien
 $statusViews = [
     'valid'        => ['class' => 'valid', 'title' => 'Geldig – toegang'],
     'already_used' => ['class' => 'used', 'title' => 'Al gebruikt'],
@@ -11,14 +7,19 @@ $statusViews = [
     'wrong_event'  => ['class' => 'warning', 'title' => 'Ander evenement'],
     'not_found'    => ['class' => 'invalid', 'title' => 'Onbekende code'],
 ];
-$selectedEventId = $event !== null ? (int) $event['id'] : null;
+
+// Welk evenement is gekozen in de keuzelijst?
+$selectedEventId = null;
+if ($event !== null) {
+    $selectedEventId = (int) $event['id'];
+}
 ?>
 <div class="scan">
     <h1>Tickets scannen</h1>
 
     <?php if ($scanResult !== null): ?>
         <?php $view = $statusViews[$scanResult['result']]; $ticket = $scanResult['ticket']; ?>
-        <section class="scan-status scan-status--<?= $view['class'] ?>" role="alert" aria-live="assertive">
+        <section class="scan-status scan-status--<?= $view['class'] ?>">
             <p class="scan-status__title"><?= e($view['title']) ?></p>
             <p><code><?= e($scanResult['code']) ?></code></p>
 
@@ -37,27 +38,31 @@ $selectedEventId = $event !== null ? (int) $event['id'] : null;
     <?php endif; ?>
 
     <section class="box">
-        <form method="post" action="<?= e(url('staff/scan')) ?>" novalidate>
-            <?= csrfField() ?>
-
+        <!-- Evenement kiezen: de pagina laadt opnieuw zodra je iets kiest -->
+        <form method="get" action="<?= baseUrl() ?>/index.php">
+            <input type="hidden" name="page" value="staff/scan">
             <div class="form-group">
                 <label for="event">Controle voor evenement</label>
-                <select id="event" name="event" data-navigate="<?= e(url('staff/scan')) ?>">
+                <select id="event" name="event" onchange="this.form.submit()">
                     <option value="">Alle evenementen (geen controle op evenement)</option>
                     <?php foreach ($events as $option): ?>
-                        <option value="<?= (int) $option['id'] ?>" <?= $selectedEventId === (int) $option['id'] ? 'selected' : '' ?>>
-                            <?= e($option['title']) ?> (<?= e(date('d-m-Y', strtotime($option['starts_at']))) ?>)
+                        <option value="<?= $option['id'] ?>" <?= $selectedEventId == $option['id'] ? 'selected' : '' ?>>
+                            <?= e($option['title']) ?> (<?= formatDate($option['starts_at']) ?>)
                         </option>
                     <?php endforeach; ?>
                 </select>
                 <span class="hint">Kies het evenement van vandaag, dan worden tickets voor andere evenementen geweigerd.</span>
             </div>
+        </form>
+
+        <!-- Ticketcode invullen -->
+        <form method="post" action="<?= url('staff/scan') ?>">
+            <?= csrfField() ?>
+            <input type="hidden" name="event" value="<?= $selectedEventId ?>">
 
             <label for="code">Ticketcode</label>
             <div class="scan-form">
-                <input type="text" id="code" name="code" placeholder="SO-XXXX-XXXX" maxlength="20"
-                       autocomplete="off" autocapitalize="characters" spellcheck="false" autofocus
-                       required<?= fieldAria($errors, 'code') ?>>
+                <input type="text" id="code" name="code" placeholder="SO-XXXX-XXXX" maxlength="20" autocomplete="off" autofocus required>
                 <button type="submit" class="btn btn--blue">Controleren</button>
             </div>
             <?= fieldError($errors, 'code') ?>

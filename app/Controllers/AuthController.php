@@ -1,16 +1,15 @@
 <?php
 
-/*
- * Controller: registreren, inloggen en uitloggen.
- */
+// Controller: registreren, inloggen en uitloggen
 
-function showRegisterForm(): void
+function showRegisterForm()
 {
     redirectIfLoggedIn();
+
     view('auth/register', ['title' => 'Account aanmaken', 'errors' => [], 'old' => []]);
 }
 
-function handleRegister(): void
+function handleRegister()
 {
     redirectIfLoggedIn();
 
@@ -19,7 +18,7 @@ function handleRegister(): void
     $password = inputText('password');
     $passwordConfirm = inputText('password_confirm');
 
-    // Alles controleren. Elke fout komt onder het juiste veld te staan.
+    // Velden checken. Elke fout komt onder het goede veld.
     $errors = [];
 
     if ($name === '') {
@@ -46,7 +45,7 @@ function handleRegister(): void
         $errors['password_confirm'] = 'De wachtwoorden zijn niet hetzelfde.';
     }
 
-    // Fouten gevonden? Formulier opnieuw tonen (naam en e-mail blijven ingevuld).
+    // Fouten? Formulier opnieuw tonen (naam en e-mail blijven ingevuld).
     if ($errors !== []) {
         view('auth/register', [
             'title'  => 'Account aanmaken',
@@ -56,20 +55,22 @@ function handleRegister(): void
         return;
     }
 
+    // Alles goed: account maken en inloggen
     $userId = createVisitor($name, $email, $password);
     loginUser(['id' => $userId, 'name' => $name, 'email' => $email, 'role' => 'visitor']);
 
-    setFlash('success', "Welkom, {$name}! Uw account is aangemaakt.");
+    setFlash('success', 'Welkom, ' . $name . '! Uw account is aangemaakt.');
     redirect();
 }
 
-function showLoginForm(): void
+function showLoginForm()
 {
     redirectIfLoggedIn();
+
     view('auth/login', ['title' => 'Inloggen', 'errors' => [], 'old' => []]);
 }
 
-function handleLogin(): void
+function handleLogin()
 {
     redirectIfLoggedIn();
 
@@ -90,27 +91,37 @@ function handleLogin(): void
         if ($user !== null) {
             loginUser($user);
             setFlash('success', 'U bent ingelogd. Welkom terug, ' . $user['name'] . '!');
-            redirect(isStaff() ? 'staff/events' : 'home');
+
+            // Medewerker naar evenementbeheer, bezoeker naar home
+            if (isStaff()) {
+                redirect('staff/events');
+            }
+            redirect();
         }
 
-        // We zeggen bewust niet wát er fout is, zodat niemand kan uitzoeken welke e-mailadressen bestaan.
+        // Expres niet zeggen wát er fout is, zodat niemand kan uitzoeken welke e-mails bestaan.
         $errors['email'] = 'Het e-mailadres of wachtwoord is onjuist.';
     }
 
     view('auth/login', ['title' => 'Inloggen', 'errors' => $errors, 'old' => ['email' => $email]], 422);
 }
 
-function handleLogout(): void
+function handleLogout()
 {
     logoutUser();
     setFlash('success', 'U bent uitgelogd.');
     redirect();
 }
 
-/** Al ingelogd? Dan heeft het geen zin om het inlog- of registratieformulier te zien. */
-function redirectIfLoggedIn(): void
+// Al ingelogd? Dan heb je inloggen/registreren niet nodig.
+function redirectIfLoggedIn()
 {
-    if (isLoggedIn()) {
-        redirect(isStaff() ? 'staff/events' : 'home');
+    if (!isLoggedIn()) {
+        return;
     }
+
+    if (isStaff()) {
+        redirect('staff/events');
+    }
+    redirect();
 }

@@ -1,6 +1,6 @@
--- SpotOn – databaseschema
--- Importeer dit bestand eerst, daarna seed.sql.
--- Op Plesk: verwijder de regels CREATE DATABASE en USE als de database al bestaat.
+-- SpotOn: alle tabellen van mijn database.
+-- Importeer eerst dit bestand en daarna seed.sql.
+-- Op Plesk: haal de regels CREATE DATABASE en USE weg als de database al bestaat.
 
 CREATE DATABASE IF NOT EXISTS spoton CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE spoton;
@@ -13,7 +13,7 @@ DROP TABLE IF EXISTS categories;
 DROP TABLE IF EXISTS users;
 SET FOREIGN_KEY_CHECKS = 1;
 
--- Gebruikers. Rol 'visitor' = bezoeker, 'staff' = ticketmedewerker.
+-- Gebruikers. Rol 'visitor' is een bezoeker, 'staff' is een ticketmedewerker.
 CREATE TABLE users (
     id            INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     name          VARCHAR(100) NOT NULL,
@@ -30,7 +30,7 @@ CREATE TABLE categories (
     UNIQUE KEY uq_categories_name (name)
 ) ENGINE=InnoDB;
 
--- Evenementen met capaciteit en verkoopperiode.
+-- Evenementen, met het aantal plaatsen (capacity) en de verkoopperiode.
 CREATE TABLE events (
     id             INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     title          VARCHAR(150) NOT NULL,
@@ -52,8 +52,8 @@ CREATE TABLE events (
     CONSTRAINT chk_events_sale_period CHECK (sale_starts_at < sale_ends_at)
 ) ENGINE=InnoDB;
 
--- Een reservering bevat één of meer tickets.
--- Alleen reserveringen met status 'confirmed' tellen mee voor de bezette plaatsen.
+-- Een reservering heeft één of meer tickets.
+-- Alleen reserveringen met status 'confirmed' tel ik mee als bezette plaatsen.
 CREATE TABLE reservations (
     id           INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     user_id      INT UNSIGNED NOT NULL,
@@ -68,7 +68,7 @@ CREATE TABLE reservations (
     CONSTRAINT chk_reservations_quantity CHECK (quantity > 0)
 ) ENGINE=InnoDB;
 
--- Elk ticket heeft een unieke code die aan de deur één keer gebruikt kan worden.
+-- Elk ticket heeft een eigen code. Die kan bij de deur maar één keer gebruikt worden.
 CREATE TABLE tickets (
     id             INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     reservation_id INT UNSIGNED NOT NULL,

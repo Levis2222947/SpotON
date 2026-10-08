@@ -1,18 +1,23 @@
 <?php
 
-/*
- * Controller voor medewerkers: reserveringen bekijken, filteren en annuleren.
- */
+// Controller: reserveringen bekijken, filteren en annuleren (medewerkers)
 
-function showStaffReservations(): void
+function showStaffReservations()
 {
+    // Onbekende status? Dan niet filteren op status.
     $status = inputText('status');
-    if (!array_key_exists($status, RESERVATION_STATUS_LABELS)) {
-        $status = ''; // onbekende status = niet filteren
+    if (!isset(RESERVATION_STATUS_LABELS[$status])) {
+        $status = '';
     }
-    $eventId = inputInt('event');
 
+    $eventId = inputInt('event');
     $reservations = searchReservations($status, $eventId);
+
+    // Tickets optellen
+    $ticketTotal = 0;
+    foreach ($reservations as $reservation) {
+        $ticketTotal += $reservation['quantity'];
+    }
 
     view('staff/reservations/index', [
         'title'        => 'Reserveringen',
@@ -20,13 +25,13 @@ function showStaffReservations(): void
         'events'       => getEventOptions(),
         'filters'      => ['status' => $status, 'event' => $eventId],
         'isFiltered'   => $status !== '' || $eventId !== null,
-        'ticketTotal'  => array_sum(array_column($reservations, 'quantity')),
+        'ticketTotal'  => $ticketTotal,
     ]);
 }
 
-function handleStaffCancelReservation(): void
+function handleStaffCancelReservation()
 {
-    $error = cancelReservation(inputInt('id') ?? 0);
+    $error = cancelReservation(inputInt('id'));
 
     if ($error === '') {
         setFlash('success', 'De reservering is geannuleerd. De plaatsen zijn weer vrij.');
@@ -34,7 +39,7 @@ function handleStaffCancelReservation(): void
         setFlash('error', $error);
     }
 
-    // Terug naar het overzicht, met dezelfde filters als daarnet
+    // Terug met dezelfde filters
     redirect('staff/reservations', [
         'status' => inputText('filter_status'),
         'event'  => inputText('filter_event'),

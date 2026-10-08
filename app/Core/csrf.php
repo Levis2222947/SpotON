@@ -1,27 +1,24 @@
 <?php
 
-/*
- * Bescherming tegen CSRF (Cross-Site Request Forgery).
- * Elk formulier krijgt een geheime code mee. Een andere website kent die code niet,
- * dus die kan geen formulier namens jou versturen.
- */
+// CSRF-beveiliging: elk formulier krijgt een geheime code mee.
+// Een andere website kent die code niet, dus kan geen formulier namens jou versturen.
 
-function csrfToken(): string
+function csrfToken()
 {
     if (empty($_SESSION['csrf_token'])) {
-        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+        $_SESSION['csrf_token'] = bin2hex(random_bytes(32)); // willekeurige code
     }
     return $_SESSION['csrf_token'];
 }
 
-/** Verborgen veld dat in elk formulier met method="post" staat. */
-function csrfField(): string
+// Verborgen veld met de code, voor in elk formulier.
+function csrfField()
 {
-    return '<input type="hidden" name="csrf_token" value="' . e(csrfToken()) . '">';
+    return '<input type="hidden" name="csrf_token" value="' . csrfToken() . '">';
 }
 
-/** Klopt de code niet? Dan stoppen we. */
-function checkCsrf(): void
+// Klopt de code niet? Dan stop ik.
+function checkCsrf()
 {
     $sentToken = $_POST['csrf_token'] ?? '';
 

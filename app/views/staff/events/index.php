@@ -1,6 +1,3 @@
-<?php
-/** @var array $events */
-?>
 <h1 class="text-center">Evenementbeheer</h1>
 
 <div class="page-head page-head--right">
@@ -52,7 +49,7 @@
                         <a class="btn btn--gray btn--small" href="<?= e(url('staff/reservations', ['event' => $event['id']])) ?>">Reserveringen</a>
                         <?php if ((int) $event['sold'] === 0): ?>
                             <form method="post" action="<?= e(url('staff/events/delete')) ?>"
-                                  data-confirm="Weet u zeker dat u &quot;<?= e($event['title']) ?>&quot; wilt verwijderen?">
+                                  onsubmit="return confirm('Weet u zeker dat u dit evenement wilt verwijderen?')">
                                 <?= csrfField() ?>
                                 <input type="hidden" name="id" value="<?= (int) $event['id'] ?>">
                                 <button type="submit" class="btn btn--red btn--small">Verwijderen</button>

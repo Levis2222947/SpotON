@@ -3,7 +3,7 @@
     <p>Mis geen enkel evenement in uw buurt.</p>
 </section>
 
-<form class="filter-bar" method="get" action="<?= e(url()) ?>" role="search">
+<form class="filter-bar" method="get" action="<?= e(url()) ?>">
     <div class="form-group">
         <label for="filter-date">Datum</label>
         <input type="date" id="filter-date" name="date" value="<?= e($filters['date']) ?>">
@@ -26,7 +26,7 @@
 </form>
 
 <?php if ($filterError): ?>
-    <div class="alert alert--warning" role="alert"><?= e($filterError) ?></div>
+    <div class="alert alert--warning"><?= e($filterError) ?></div>
 <?php endif; ?>
 
 <h2 class="text-center">Aankomende Evenementen</h2>
@@ -41,7 +41,7 @@
 <?php else: ?>
     <div class="event-grid">
         <?php foreach ($events as $event): ?>
-            <?= partial('event-card', ['event' => $event]) ?>
+            <?php require APP_ROOT . '/app/views/partials/event-card.php'; ?>
         <?php endforeach; ?>
     </div>
 <?php endif; ?>

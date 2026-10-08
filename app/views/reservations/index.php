@@ -1,6 +1,3 @@
-<?php
-/** @var array $reservations */
-?>
 <h1 class="text-center">Mijn reserveringen</h1>
 
 <?php if ($reservations === []): ?>
@@ -36,7 +33,7 @@
                         <a class="btn btn--blue btn--small" href="<?= e(url('reservation', ['id' => $reservation['id']])) ?>">Details</a>
                         <?php if (canCancelReservation($reservation)): ?>
                             <form method="post" action="<?= e(url('reservation/cancel')) ?>"
-                                  data-confirm="Weet u zeker dat u deze reservering wilt annuleren? Uw tickets worden ongeldig.">
+                                  onsubmit="return confirm('Weet u zeker dat u deze reservering wilt annuleren? Uw tickets worden ongeldig.')">
                                 <?= csrfField() ?>
                                 <input type="hidden" name="id" value="<?= (int) $reservation['id'] ?>">
                                 <button type="submit" class="btn btn--red btn--small">Annuleren</button>

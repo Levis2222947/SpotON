@@ -1,6 +1,3 @@
-<?php
-/** @var array $event @var int $quantity @var int $maxQuantity @var array $errors */
-?>
 <section class="box--medium">
     <p><a class="btn btn--gray btn--small" href="<?= e(url('event', ['id' => $event['id']])) ?>">Terug</a></p>
 
@@ -16,7 +13,7 @@
         </div>
 
         <?php if ($maxQuantity < 1): ?>
-            <div class="alert alert--error" role="alert">
+            <div class="alert alert--error">
                 <?= e($errors['quantity'] ?? 'Er zijn geen plaatsen meer beschikbaar.') ?>
             </div>
             <a class="btn btn--gray" href="<?= e(url()) ?>">Bekijk andere evenementen</a>
@@ -27,12 +24,12 @@
                 <div class="form-group">
                     <label for="quantity">Aantal tickets:</label>
                     <input type="number" id="quantity" name="quantity" value="<?= (int) $quantity ?>" min="1"
-                           max="<?= $maxQuantity ?>" required data-quantity<?= fieldAria($errors, 'quantity') ?>>
+                           max="<?= $maxQuantity ?>" required oninput="document.getElementById('total').textContent = this.value">
                     <span class="hint">Maximaal <?= $maxQuantity ?> tickets per reservering.</span>
                     <?= fieldError($errors, 'quantity') ?>
                 </div>
 
-                <p><strong>Totaal aantal tickets: <span data-quantity-summary><?= (int) $quantity ?></span></strong></p>
+                <p><strong>Totaal aantal tickets: <span id="total"><?= (int) $quantity ?></span></strong></p>
 
                 <div class="form-actions">
                     <a class="btn btn--red" href="<?= e(url('event', ['id' => $event['id']])) ?>">Annuleren</a>

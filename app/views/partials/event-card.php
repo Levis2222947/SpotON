@@ -1,6 +1,3 @@
-<?php
-/** @var array $event */
-?>
 <div class="event-card">
     <h3><?= e($event['title']) ?></h3>
     <p><strong>Datum:</strong> <?= e(formatDate($event['starts_at'])) ?></p>
